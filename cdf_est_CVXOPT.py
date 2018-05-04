@@ -4,7 +4,7 @@ import numpy as np
 from scipy.interpolate import PPoly
 import cvxopt
 cvxopt.solvers.options['show_progress'] = False
-cvxopt.solvers.options['maxiters'] = 500
+cvxopt.solvers.options['maxiters'] = 500    # seems to reduce errors (unconfirmed)
 
 from likelihood_funcs import *
 
@@ -14,21 +14,35 @@ TODO
 
 - improve "smoothness" input parameter
     - change to operate on a [0,1] scale (0 = exact interpolation, 1 = uniform distribution)
+- characterize slope with b_mid, instead of b_0
+    - reduces the repetition of calculations -> reduce errors
+    - reduces objective matrix non-sparsity
 - format tests more professionally
+- treat repeat samples as discrete samples
+    - i.e., make cdf discontinuous around X_i
+    - i.e., add dirac delta portions to the pdf
 '''
 
-def expand_vars(b0_c, X):
+def expand_vars(bmid_c, X):
     n = X.shape[-1]
-    b0_c = np.asarray(b0_c)
-    b_0, c = b0_c[..., 0:1], b0_c[..., 1:]
+    n_mid = n // 2
+    
+    bmid_c = np.asarray(bmid_c)
+    b_mid, c = np.split(bmid_c, (1,), axis=-1)
 
     alt_sign = (-1) ** np.arange(n)
     diffc_diffX = np.diff(c, axis=-1) / np.diff(X, axis=-1)
-
-    b = alt_sign * np.concatenate((
-        b_0,
-        b_0 + np.cumsum(-2 * alt_sign[:-1] * diffc_diffX, axis=-1)
-        ), axis=-1)
+    
+    bpart_lower, bpart_upper = np.array_split(
+            -2 * alt_sign[:-1] * diffc_diffX,
+        (n_mid,), axis=-1)
+    b_cumdiff = np.concatenate([
+            -bpart_lower[..., ::-1].cumsum(-1)[..., ::-1],
+            np.zeros_like(b_mid),
+            np.cumsum(bpart_upper, -1),
+        ], axis=-1)
+    b = alt_sign * (b_cumdiff + alt_sign[n_mid]*b_mid)
+    
     #a_diffX = diffc_diffX - b[..., :-1]
     a_diffX = np.diff(b, axis=-1) / 2
 
@@ -36,17 +50,24 @@ def expand_vars(b0_c, X):
 
 def expand_vars_lc(X):
     n = X.shape[-1]
+    n_mid = n // 2
 
-    b0_c = np.diagflat(np.ones(n+1, dtype=np.int64))
-    b_0, c = b0_c[0:1], b0_c[1:]
+    bmid_c = np.diagflat(np.ones(n+1, dtype=np.int64))
+    b_mid, c = np.split(bmid_c, (1,), axis=0)
 
     diffc_diffX = np.diff(c, axis=0) / np.diff(X)[:, np.newaxis]
     alt_sign = (-1) ** np.arange(n)[:, np.newaxis]
-
-    b = alt_sign * np.cumsum(
-        alt_sign * np.concatenate((b_0, 2*diffc_diffX), axis=0),
-        axis=0)
-
+    
+    bpart_lower, bpart_upper = np.array_split(
+            -2 * alt_sign[:-1] * diffc_diffX,
+        (n_mid,), axis=0)
+    b_cumdiff = np.concatenate([
+            -bpart_lower[::-1].cumsum(0)[::-1],
+            np.zeros_like(b_mid),
+            np.cumsum(bpart_upper, 0),
+        ], axis=0)
+    b = alt_sign * (b_cumdiff + alt_sign[n_mid]*b_mid)
+    
     a_diffX = np.diff(b, axis=0) / 2
 
     return namedtuple("SplineVars", "a_diffX b c")(a_diffX, b, c)
@@ -59,7 +80,7 @@ def expand_vars_lc(X):
 def make_obj_scale(X, smoothness_factor=1):
     n = X.shape[-1]
     scale_a = smoothness_factor / (X[-1] - X[0])
-    scale_c = -d2dp2_rlhood(n, np.arange(n)) * 10 / (n.bit_length() * n)
+    scale_c = -d2dp2_rlhood(n, np.arange(n)) / (n.bit_length() * n)
 
     return namedtuple("ObjectiveScales", "scale_a scale_c")(scale_a, scale_c)
 
@@ -139,30 +160,32 @@ def make_A_b(X):
 
 
 
-def b0_c_init_state(X):
+def bmid_c_init_state(X):
     n = len(X)
+    n_mid = n // 2
 
     '''
     # straight line from first point to last point (when a^2 == 0)
-    b_0 = ((n-1) / n) / (X[-1] - X[0])
-    c = (.5 / n) + b_0 * (X - X[0])
+    b_mid = ((n-1) / n) / (X[-1] - X[0])
+    c = (.5 / n) + b_mid * (X - X[0])
 
-    return np.concatenate(([b_0], c))
+    return np.concatenate(([b_mid], c))
     '''
 
     # interpolation through all points (when e^2 == 0)
-    b_0 = (1/n) / (X[1]-X[0])
+    b_mid = (2/n) / (X[n_mid+1] - X[n_mid-1])
     c = np.arange(1,2*n,2) / (2*n)
-    return np.concatenate(([b_0], c))
+    
+    return np.concatenate(([b_mid], c))
     #'''
 
 
 
-def clean_optimizer_results(b0_c_opt, X):
+def clean_optimizer_results(bmid_c_opt, X):
     n = len(X)
-    b0_c_opt = np.squeeze(np.array(b0_c_opt))
+    bmid_c_opt = np.squeeze(np.array(bmid_c_opt))
     
-    d2P_X, dP_X, P_X = expand_vars(b0_c_opt, X)
+    d2P_X, dP_X, P_X = expand_vars(bmid_c_opt, X)
     d2P_X = d2P_X / np.diff(X)
     # Add leading/trailing endpoint regions. I.e., adds:
     #    1) knots X0, Xnp1 that smoothly joins curve to the constant-value regions
@@ -235,7 +258,7 @@ def cdf_approx(X): #, smoothness_factor=1):
     P, q = make_P_q(X, scale_a=scale_axi, scale_e=scale_ei)
     G, h = make_G_h(X)
     #A, b = make_A_b(X) # simply unnecessary
-    b0_c_init = b0_c_init_state(X)
+    bmid_c_init = bmid_c_init_state(X)
     
     qp_res = cvxopt.solvers.qp(
         cvxopt.matrix(P),
