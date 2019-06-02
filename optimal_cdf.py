@@ -11,19 +11,19 @@ def init_parameters(X):
     n = len(X)
     n_mid = n // 2
 
-    '''
     # straight line from first point to last point (when a^2 == 0)
     b_mid = ((n-1) / n) / (X[-1] - X[0])
     c = (.5 / n) + b_mid * (X - X[0])
 
     return np.concatenate(([b_mid], c))
-    '''
 
+    '''
     # interpolation through all points (when e^2 == 0)
     b_mid = (2/n) / (X[n_mid+1] - X[n_mid-1])
     c = np.arange(1, 2*n, 2) / (2*n)
 
     return np.concatenate(([b_mid], c))
+    '''
 
 
 class OptimizerVariableExpander:
@@ -72,7 +72,16 @@ class OptimizerVariableExpander:
 
 
 def make_spline(params, X):
+    assert np.all(X[1:] > X[:-1])
+
     a_DX, b, c = OptimizerVariableExpander(params, X)
+
+    print('a * dX', a_DX)
+    print('b', b)
+    print('c', c)
+
+    assert np.all(b >= 0)
+    assert np.all(np.diff(c, prepend=0, append=1) >= 0)
 
     # Add leading/trailing endpoint regions. I.e., adds:
     #    1) knots X0, Xnp1 that smoothly joins curve to the constant-value regions
@@ -83,12 +92,17 @@ def make_spline(params, X):
     #        sampled region
     X0m1 = X[0] - 2*c[0] / b[0]
     Xnp1 = X[-1] + 2*(1 - c[-1]) / b[-1]
+    X0m2 = X0m1 - (Xnp1-X0m1)
+    Xnp2 = Xnp1 + (Xnp1-X0m1)
+
+    print(np.diff([X0m2, X0m1, X[0], X[-1], Xnp1, Xnp2]))
+    X = np.concatenate(([X0m2, X0m1], X, [Xnp1, Xnp2]))
+
+    assert np.all(X[1:] > X[:-1])
 
     a = np.concatenate(([0], a_DX, [0]))
     b = np.concatenate(([0, 0], b, [0]))
     c = np.concatenate(([0, 0], c, [1]))
-
-    X = np.concatenate(([2*X0m1-X[0], X0m1], X, [Xnp1, 2*Xnp1-X[-1]]))
 
     return scipy.interpolate.PPoly(
         np.stack((a, b, c), axis=0), X, extrapolate=True,
@@ -105,24 +119,30 @@ def min_obj_function(params, X):
     est_c = np.linspace(0, 1, 2*len(c)+1)[1::2]
 
     return (
-        np.sum(a_DX**2)
-        / np.prod(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2)
+        np.log2(np.sum(a_DX**2))
+        - np.sum(np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2))
     )
 
 
-def make_bi_constraint(i, X):
+def make_bi_constraints(X):
     def fun(params):
-        return OptimizerVariableExpander(params, X).b[i]
+        return OptimizerVariableExpander(params, X).b
 
-    return {'type': 'ineq', 'fun': fun}
+    return scipy.optimize.NonlinearConstraint(
+        fun, 0, np.inf, keep_feasible=True
+    )
 
 
-def make_delta_ci_constraint(i, X):
+def make_delta_ci_constraints(X):
     def fun(params):
-        pexp = OptimizerVariableExpander(params, X)
-        return pexp.c[i+1] - pexp.c[i]
+        return np.diff(
+            OptimizerVariableExpander(params, X).c,
+            prepend=0, append=1,
+        )
 
-    return {'type': 'ineq', 'fun': fun}
+    return scipy.optimize.NonlinearConstraint(
+        fun, 0, np.inf, keep_feasible=True
+    )
 
 
 def clean_samples(X):
@@ -154,20 +174,7 @@ def cdf_approx(X):
         min_obj_function,
         init_parameters(X),
         args=(X,),
-        constraints=[
-            make_bi_constraint(i, X) for i in range(n)
-        ] + [
-            make_delta_ci_constraint(i, X) for i in range(n-1)
-        ] + [
-            {
-                'type': 'ineq',
-                'fun': lambda params: OptimizerVariableExpander(params, None).c[0]
-            },
-            {
-                'type': 'ineq',
-                'fun': lambda params: 1-OptimizerVariableExpander(params, None).c[-1]
-            },
-        ],
+        constraints=[make_bi_constraints(X), make_delta_ci_constraints(X)],
     )
 
     return make_spline(results.x, X)
