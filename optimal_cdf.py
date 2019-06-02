@@ -26,36 +26,36 @@ def init_parameters(X):
     '''
 
 
-class OptimizerVariableExpander:
-    def __init__(self, params, X):
-        self._b_mid, self.c = np.split(params, [1])
+class MatrixBuilder:
+    def __init__(self, X):
         self._X = X
+        self._b_mid, self.c = np.split(np.eye(self.n+1), [1], axis=0)
 
         self._b = None
         self._a_DX = None
 
     @property
     def n(self):
-        return len(self.c)
+        return len(self._X)
 
     @property
     def b(self):
         if self._b is None:
             n_mid = self.n // 2
 
-            alt_sign = (-1) ** np.arange(self.n)
-            Dc_div_DX = np.diff(self.c, axis=-1) / np.diff(self._X, axis=-1)
+            alt_sign = (-1) ** np.arange(self.n)[:, np.newaxis]
+            Dc_div_DX = np.diff(self.c, axis=0) / np.diff(self._X)[:, np.newaxis]
 
             b_lower, b_upper = np.array_split(
                 -2 * alt_sign[:-1] * Dc_div_DX,
                 (n_mid,),
-                axis=-1
+                axis=0
             )
             b_cumdiff = np.concatenate([
-                -b_lower[..., ::-1].cumsum(-1)[..., ::-1],
+                -b_lower[::-1].cumsum(axis=0)[::-1],
                 np.zeros_like(self._b_mid),
-                np.cumsum(b_upper, -1),
-            ], axis=-1)
+                b_upper.cumsum(axis=0),
+            ], axis=0)
             self._b = alt_sign * (b_cumdiff + alt_sign[n_mid]*self._b_mid)
 
         return self._b
@@ -63,18 +63,25 @@ class OptimizerVariableExpander:
     @property
     def a_DX(self):
         if self._a_DX is None:
-            self._a_DX = np.diff(self.b, axis=-1, prepend=0, append=0) / 2
+            self._a_DX = np.diff(self.b, axis=0, prepend=0, append=0) / 2
 
         return self._a_DX
 
     def __iter__(self):
         return iter((self.a_DX, self.b, self.c))
 
+    def pull_values_from(self, params):
+        return (
+            self.a_DX @ params,
+            self.b @ params,
+            self.c @ params,
+        )
+
 
 def make_spline(params, X):
     assert np.all(X[1:] > X[:-1])
 
-    a_DX, b, c = OptimizerVariableExpander(params, X)
+    a_DX, b, c = MatrixBuilder(X).pull_values_from(params)
 
     print('a * dX', a_DX)
     print('b', b)
@@ -114,8 +121,8 @@ def lhood_quad_coeffs(n):
 
 
 def min_obj_function(params, X):
-    p_exp = OptimizerVariableExpander(params, X)
-    a_DX, b, c = p_exp
+    p_exp = MatrixBuilder(X)
+    a_DX, b, c = p_exp.pull_values_from(params)
     est_c = np.linspace(0, 1, 2*len(c)+1)[1::2]
 
     return (
@@ -125,23 +132,18 @@ def min_obj_function(params, X):
 
 
 def make_bi_constraints(X):
-    def fun(params):
-        return OptimizerVariableExpander(params, X).b
-
-    return scipy.optimize.NonlinearConstraint(
-        fun, 0, np.inf, keep_feasible=True
+    return scipy.optimize.LinearConstraint(
+        MatrixBuilder(X).b, 0, np.inf, keep_feasible=True
     )
 
 
 def make_delta_ci_constraints(X):
-    def fun(params):
-        return np.diff(
-            OptimizerVariableExpander(params, X).c,
-            prepend=0, append=1,
-        )
-
-    return scipy.optimize.NonlinearConstraint(
-        fun, 0, np.inf, keep_feasible=True
+    return scipy.optimize.LinearConstraint(
+        np.diff(
+            MatrixBuilder(X).c,
+            axis=0, prepend=0, append=1,
+        ),
+        0, np.inf, keep_feasible=True
     )
 
 
@@ -168,7 +170,6 @@ def cdf_approx(X):
     """
     # Pre-format input as ordered numpy array
     clean_samples(X)
-    n = len(X)
 
     results = scipy.optimize.minimize(
         min_obj_function,
