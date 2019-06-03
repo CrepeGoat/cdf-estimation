@@ -79,18 +79,7 @@ class MatrixBuilder:
         )
 
 
-def make_spline(params, X):
-    assert np.all(X[1:] > X[:-1])
-
-    a_DX, b, c = MatrixBuilder(X).pull_values_from(params)
-
-    print('a * dX', a_DX)
-    print('b', b)
-    print('c', c)
-
-    assert np.all(b >= 0)
-    assert np.all(np.diff(c, prepend=0, append=1) >= 0)
-
+def extend_samples(X, a_DX, b, c):
     # Add leading/trailing endpoint regions. I.e., adds:
     #    1) knots X0, Xnp1 that smoothly joins curve to the constant-value regions
     #        P(x) = 0 as x -> -inf,
@@ -103,12 +92,14 @@ def make_spline(params, X):
     X0m2 = X0m1 - (Xnp1-X0m1)
     Xnp2 = Xnp1 + (Xnp1-X0m1)
 
-    print(np.diff([X0m2, X0m1, X[0], X[-1], Xnp1, Xnp2]))
-    X = np.concatenate(([X0m2, X0m1], X, [Xnp1, Xnp2]))
+    return np.concatenate(([X0m2, X0m1], X, [Xnp1, Xnp2]))
 
-    assert np.all(X[1:] > X[:-1])
 
-    a = np.concatenate(([0], a_DX, [0]))
+def make_spline(params, X):
+    a_DX, b, c = MatrixBuilder(X).pull_values_from(params)
+
+    X = extend_samples(X, a_DX, b, c)
+    a = np.concatenate(([0], a_DX, [0])) / np.diff(X)
     b = np.concatenate(([0, 0], b, [0]))
     c = np.concatenate(([0, 0], c, [1]))
 
@@ -121,20 +112,25 @@ def lhood_quad_coeffs(n):
     return -d2dp2_rlhood(n, np.arange(n))
 
 
-def min_obj_function(params, X):
+def make_obj_func(X):
     p_exp = MatrixBuilder(X)
-    a_DX, b, c = p_exp.pull_values_from(params)
-    est_c = np.linspace(0, 1, 2*len(c)+1)[1::2]
+    est_c = np.linspace(0, 1, 2*len(X)+1)[1::2]
 
-    return (
-        np.log2(np.sum(a_DX**2))
-        - np.sum(np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2))
-    )
+    def min_obj_func(params):
+        a_DX, b, c = p_exp.pull_values_from(params)
+
+        return (
+            np.log2(np.sum(a_DX**2 / np.diff(extend_samples(X, a_DX, b, c))[1:-1]))
+            - np.sum(np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2))
+        )
+
+    return min_obj_func
 
 
 def make_bi_constraints(X):
     return scipy.optimize.LinearConstraint(
-        MatrixBuilder(X).b, 0, np.inf, keep_feasible=True
+        MatrixBuilder(X).b,
+        0, np.inf, keep_feasible=True
     )
 
 
@@ -175,10 +171,12 @@ def cdf_approx(X):
     X = clean_samples(X)
 
     results = scipy.optimize.minimize(
-        min_obj_function,
+        make_obj_func(X),
         init_parameters(X),
-        args=(X,),
         constraints=[make_bi_constraints(X), make_delta_ci_constraints(X)],
     )
+
+    if not results.success:
+        raise RuntimeError("failed optimization: " + results.message)
 
     return make_spline(results.x, X)
