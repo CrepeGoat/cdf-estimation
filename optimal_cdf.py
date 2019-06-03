@@ -3,6 +3,7 @@ from collections import namedtuple
 import numpy as np
 import scipy
 import scipy.interpolate
+import scipy.optimize
 
 from likelihood_funcs import *
 
@@ -154,6 +155,8 @@ def clean_samples(X):
         X.sort()
     assert np.all(X[1:] > X[:-1])  # avoids case of duplicate X-values
 
+    return X
+
 
 def cdf_approx(X):
     """
@@ -169,7 +172,7 @@ def cdf_approx(X):
         TODO
     """
     # Pre-format input as ordered numpy array
-    clean_samples(X)
+    X = clean_samples(X)
 
     results = scipy.optimize.minimize(
         min_obj_function,
