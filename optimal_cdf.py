@@ -33,7 +33,7 @@ class MatrixBuilder:
         self._b_mid, self.c = np.split(np.eye(self.n+1), [1], axis=0)
 
         self._b = None
-        self._a_DX = None
+        self._aDX = None
 
     @property
     def n(self):
@@ -62,24 +62,24 @@ class MatrixBuilder:
         return self._b
 
     @property
-    def a_DX(self):
-        if self._a_DX is None:
-            self._a_DX = np.diff(self.b, axis=0, prepend=0, append=0) / 2
+    def aDX(self):
+        if self._aDX is None:
+            self._aDX = np.diff(self.b, axis=0, prepend=0, append=0) / 2
 
-        return self._a_DX
+        return self._aDX
 
     def __iter__(self):
-        return iter((self.a_DX, self.b, self.c))
+        return iter((self.aDX, self.b, self.c))
 
     def pull_values_from(self, params):
         return (
-            self.a_DX @ params,
-            self.b @ params,
-            self.c @ params,
+            self.aDX.dot(params),
+            self.b.dot(params),
+            self.c.dot(params),
         )
 
 
-def extend_samples(X, a_DX, b, c):
+def extend_samples(X, aDX, b, c):
     # Add leading/trailing endpoint regions. I.e., adds:
     #    1) knots X0, Xnp1 that smoothly joins curve to the constant-value regions
     #        P(x) = 0 as x -> -inf,
@@ -96,10 +96,10 @@ def extend_samples(X, a_DX, b, c):
 
 
 def make_spline(params, X):
-    a_DX, b, c = MatrixBuilder(X).pull_values_from(params)
+    aDX, b, c = MatrixBuilder(X).pull_values_from(params)
 
-    X = extend_samples(X, a_DX, b, c)
-    a = np.concatenate(([0], a_DX, [0])) / np.diff(X)
+    X = extend_samples(X, aDX, b, c)
+    a = np.concatenate(([0], aDX, [0])) / np.diff(X)
     b = np.concatenate(([0, 0], b, [0]))
     c = np.concatenate(([0, 0], c, [1]))
 
@@ -117,10 +117,10 @@ def make_obj_func(X):
     est_c = np.linspace(0, 1, 2*len(X)+1)[1::2]
 
     def min_obj_func(params):
-        a_DX, b, c = p_exp.pull_values_from(params)
+        aDX, b, c = p_exp.pull_values_from(params)
 
         return (
-            np.log2(np.sum(a_DX**2 / np.diff(extend_samples(X, a_DX, b, c))[1:-1]))
+            np.log2(np.sum(aDX**2 / np.diff(extend_samples(X, aDX, b, c))[1:-1]))
             - np.sum(np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2))
         )
 
