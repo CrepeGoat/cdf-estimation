@@ -50,19 +50,25 @@ def test_sp_expand_vars(n):
     n_mid = n//2
     b_mid, c, params, X = sp_stub_bmid_c_bmidc_X(n)
 
-    sp_aDX, sp_b, sp_c = MatrixBuilder(X).pull_values_from(params)
+    sp_aDX, sp_b, sp_c = MatrixBuilder(X)
 
-    np_sp_simplify = np.vectorize(sp.simplify)
+    np_sp_simplify = np.vectorize(sp.expand)
 
     def sp_eq(expr1, expr2):
         return np.all(np_sp_simplify(expr1 - expr2) == 0)
 
-    assert sp.simplify(sp_b[n_mid] - b_mid) == 0
-    assert sp_eq(sp_c, c)
+    assert sp_eq(sp_b[n_mid].dot(params), b_mid)
+    assert sp_eq(sp_c.dot(params), c)
 
-    assert sp_eq(np.diff(sp_c), (sp_aDX[1:-1] + sp_b[:-1]) * np.diff(X))
-    assert sp_eq(2*np.diff(sp_c), (sp_b[1:] + sp_b[:-1]) * np.diff(X))
-    assert sp_eq(2*sp_aDX[1:-1], np.diff(sp_b))
+    assert sp_eq(
+        np.diff(sp_c, axis=0),
+        (sp_aDX[1:-1] + sp_b[:-1]) * np.diff(X)[:, np.newaxis]
+    )
+    assert sp_eq(
+        2*np.diff(sp_c, axis=0),
+        (sp_b[1:] + sp_b[:-1]) * np.diff(X)[:, np.newaxis]
+    )
+    assert sp_eq(2*sp_aDX[1:-1], np.diff(sp_b, axis=0))
 
 
 @pytest.mark.parametrize("n", (test_size,))
