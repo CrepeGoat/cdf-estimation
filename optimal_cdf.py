@@ -119,37 +119,58 @@ def make_obj_func(X):
     def min_obj_func(params):
         aDX, b, c = p_exp.pull_values_from(params)
 
-        return (
-            np.log2(np.sum(aDX**2 / np.diff(extend_samples(X, aDX, b, c))[1:-1]))
-            - np.sum(np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2))
+        roughness = np.sum(np.log2(
+            aDX**2 / np.diff(extend_samples(X, aDX, b, c))[1:-1]
+        ))
+        likelihood_fit = np.sum(
+            np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2)
+            #log2_lhood(len(c), i, p_i)
+            #for i, p_i in enumerate(c)
         )
+
+        return roughness - likelihood_fit
 
     return min_obj_func
 
 
 def make_bi_constraints(X):
-    return scipy.optimize.LinearConstraint(
-        MatrixBuilder(X).b,
-        0, np.inf, keep_feasible=True
-    )
+    b = MatrixBuilder(X).b
+
+    return [
+        {
+            'type': 'ineq',
+            'fun': lambda params: b_i.dot(params),
+            'jac': lambda params: b_i
+        }
+        for b_i in b
+    ]
 
 
 def make_delta_ci_constraints(X):
-    return scipy.optimize.LinearConstraint(
-        np.diff(
-            MatrixBuilder(X).c,
-            axis=0, prepend=0, append=1,
-        ),
-        0, np.inf, keep_feasible=True
-    )
+    c = MatrixBuilder(X).c
+
+    return [
+        {
+            'type': 'ineq',
+            'fun': lambda params: c_diff.dot(params),
+            'jac': lambda params: c_diff
+        }
+        for c_diff in np.diff(c, axis=0, prepend=0)
+    ] + [
+        {
+            'type': 'ineq',
+            'fun': lambda params: 1-c[-1].dot(params),
+            'jac': lambda params: -c[-1]
+        }
+    ]
 
 
 def clean_samples(X):
     X = np.asarray(X)
 
-    if not np.all(X[1:] >= X[:-1]):
+    if not np.all(np.diff(X) >= 0):
         X.sort()
-    assert np.all(X[1:] > X[:-1])  # avoids case of duplicate X-values
+    assert np.all(np.diff(X) > 0)  # avoids case of duplicate X-values
 
     return X
 
@@ -173,8 +194,13 @@ def cdf_approx(X):
     results = scipy.optimize.minimize(
         make_obj_func(X),
         init_parameters(X),
-        constraints=[make_bi_constraints(X), make_delta_ci_constraints(X)],
+        constraints=make_bi_constraints(X) + make_delta_ci_constraints(X),
+        #method='COBYLA',
+        method='SLSQP',
+        #method='trust-constr',
     )
+
+    print(results)
 
     if not results.success:
         raise RuntimeError("failed optimization: " + results.message)

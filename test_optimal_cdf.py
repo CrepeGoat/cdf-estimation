@@ -86,6 +86,7 @@ def test_bmid_c_init_state(n):
 
 @pytest.mark.parametrize("n", (test_size,))
 def test_clean_optimizer_results(n):
+    pass
 
     '''
     status = True
@@ -116,7 +117,6 @@ def test_clean_optimizer_results(n):
         print(d2P_X)
         assert False
     '''
-    pass
 
 
 if __name__ == "__main__":
