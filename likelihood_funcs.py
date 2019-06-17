@@ -1,5 +1,7 @@
 from itertools import chain
 
+import numpy as np
+
 
 def nCkarray(k_array):
     result = 1
@@ -8,8 +10,15 @@ def nCkarray(k_array):
     return result
 
 
+def log2_nCkarray(k_array):
+    result = 0
+    for i, j in enumerate(chain(*(range(1, k+1) for k in k_array)), 1):
+        result = np.log2(i) - np.log2(j)
+    return result
+
+
 # k indexed in [0,n)
-def p_maxlh(n, k):
+def p_max_likelihood(n, k):
     """
     Calculates the maximum likelihood estimator for the kth sample
     of n total samples.
@@ -43,9 +52,19 @@ def lhood(n, k, p=None):
         N/A
     """
     if p is None:
-        p = p_maxlh(n, k)
+        p = p_max_likelihood(n, k)
 
-    return nCkarray([k, n-k]) * p**(k+.5) * (1-p)**(n-k-.5)
+    return nCkarray([k, n-k]) * p**(k+.5) * (1-p)**(n-(k+.5))
+
+
+def log2_lhood(n, k, p=None):
+    """
+    Calculates the logarithm (base-2) of the result from the lhood function.
+    """
+    if p is None:
+        p = p_max_likelihood(n, k)
+
+    return log2_nCkarray([k, n-k]) + np.log2(p)*(k+.5) + np.log2(1-p)*(n-(k+.5))
 
 
 def d2dp2_lhood(n, k, p=None):
@@ -63,7 +82,7 @@ def d2dp2_lhood(n, k, p=None):
         N/A
     """
     if p is None:
-        p = p_maxlh(n, k)
+        p = p_max_likelihood(n, k)
 
     return (
         nCkarray([k, n-k])
@@ -88,7 +107,7 @@ def d2dp2_rlhood(n, k, p=None):
     Raises:
         N/A
     """
-    phat = p_maxlh(n, k)
+    phat = p_max_likelihood(n, k)
     if p is None:
         p = phat
 
