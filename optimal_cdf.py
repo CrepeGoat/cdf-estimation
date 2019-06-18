@@ -119,13 +119,13 @@ def make_obj_func(X):
     def min_obj_func(params):
         aDX, b, c = p_exp.pull_values_from(params)
 
-        roughness = np.sum(np.log2(
+        roughness = np.log2(np.sum(
             aDX**2 / np.diff(extend_samples(X, aDX, b, c))[1:-1]
         ))
         likelihood_fit = np.sum(
-            np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2)
-            #log2_lhood(len(c), i, p_i)
-            #for i, p_i in enumerate(c)
+            #np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2)
+            log2_lhood(len(c), i, p_i)
+            for i, p_i in enumerate(c)
         )
 
         return roughness - likelihood_fit
@@ -196,8 +196,9 @@ def cdf_approx(X):
         init_parameters(X),
         constraints=make_bi_constraints(X) + make_delta_ci_constraints(X),
         #method='COBYLA',
-        method='SLSQP',
+        #method='SLSQP',
         #method='trust-constr',
+        options={'maxiter': 2 * 10**3}
     )
 
     print(results)
