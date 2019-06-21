@@ -1,4 +1,5 @@
 from itertools import chain
+import functools
 
 import numpy as np
 
@@ -10,12 +11,26 @@ def nCkarray(k_array):
     return result
 
 
-def log2_nCkarray(k_array):
-    result = 0
-    for i, j in enumerate(chain(*(range(1, k+1) for k in k_array)), 1):
-        result = np.log2(i) - np.log2(j)
-    return result
+@functools.lru_cache(maxsize=None)
+def log2_nPk(n, k):
+    return np.sum(np.log2(np.arange(n, n-k, -1)))
 
+
+def log2_factorial(n):
+    return log2_nPk(n, n)
+
+
+def log2_nCk(n, k):
+    k = min(k, n-k)
+    return log2_nPk(n, k) - log2_factorial(k)
+
+
+def log2_nCkarray(k_array):
+    n = np.sum(k_array)
+
+    return log2_factorial(n) - sum(
+        log2_factorial(k_i) for k_i in k_array
+    )
 
 # k indexed in [0,n)
 def p_max_likelihood(n, k):
@@ -64,7 +79,7 @@ def log2_lhood(n, k, p=None):
     if p is None:
         p = p_max_likelihood(n, k)
 
-    return log2_nCkarray([k, n-k]) + np.log2(p)*(k+.5) + np.log2(1-p)*(n-(k+.5))
+    return log2_nCk(n, k) + np.log2(p)*(k+.5) + np.log2(1-p)*(n-(k+.5))
 
 
 def d2dp2_lhood(n, k, p=None):

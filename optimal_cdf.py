@@ -198,7 +198,7 @@ def cdf_approx(X):
         #method='COBYLA',
         #method='SLSQP',
         #method='trust-constr',
-        options={'maxiter': 2 * 10**3}
+        #options={'maxiter': 2 * 10**3}
     )
 
     print(results)
