@@ -148,14 +148,20 @@ def make_delta_ci_constraints(X):
     return [
         {
             'type': 'ineq',
-            'fun': lambda params: c_diff.dot(params),
-            'jac': lambda params: c_diff
+            'fun': lambda params: c[..., 0].dot(params),
+            'jac': lambda params: c[..., 0]
         }
-        for c_diff in np.diff(c, axis=-1, prepend=0).T
     ] + [
         {
             'type': 'ineq',
-            'fun': lambda params: 1-c[..., -1].dot(params),
+            'fun': lambda params: c_diff.dot(params),
+            'jac': lambda params: c_diff
+        }
+        for c_diff in np.diff(c, axis=-1).T
+    ] + [
+        {
+            'type': 'ineq',
+            'fun': lambda params: 1 - c[..., -1].dot(params),
             'jac': lambda params: -c[..., -1]
         }
     ]
