@@ -57,18 +57,18 @@ def test_sp_expand_vars(n):
     def sp_eq(expr1, expr2):
         return np.all(np_sp_simplify(expr1 - expr2) == 0)
 
-    assert sp_eq(sp_b[n_mid].dot(params), b_mid)
-    assert sp_eq(sp_c.dot(params), c)
+    assert sp_eq(sp_b[..., n_mid].dot(params), b_mid)
+    assert sp_eq(sp_c.T.dot(params), c)
 
     assert sp_eq(
-        np.diff(sp_c, axis=0),
-        (sp_aDX[1:-1] + sp_b[:-1]) * np.diff(X)[:, np.newaxis]
+        np.diff(sp_c, axis=-1),
+        (sp_aDX[..., 1:-1] + sp_b[..., :-1]) * np.diff(X)
     )
     assert sp_eq(
-        2*np.diff(sp_c, axis=0),
-        (sp_b[1:] + sp_b[:-1]) * np.diff(X)[:, np.newaxis]
+        2*np.diff(sp_c, axis=-1),
+        (sp_b[..., 1:] + sp_b[..., :-1]) * np.diff(X)
     )
-    assert sp_eq(2*sp_aDX[1:-1], np.diff(sp_b, axis=0))
+    assert sp_eq(2*sp_aDX[..., 1:-1], np.diff(sp_b, axis=-1))
 
 
 @pytest.mark.parametrize("n", (test_size,))

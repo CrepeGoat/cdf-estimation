@@ -30,7 +30,7 @@ def init_parameters(X):
 class MatrixBuilder:
     def __init__(self, X):
         self._X = X
-        self._b_mid, self.c = np.split(np.eye(self.n+1), [1], axis=0)
+        self._b_mid, self.c = np.split(np.eye(self.n+1), [1], axis=-1)
 
         self._b = None
         self._aDX = None
@@ -44,19 +44,19 @@ class MatrixBuilder:
         if self._b is None:
             n_mid = self.n // 2
 
-            alt_sign = (-1) ** np.arange(self.n)[:, np.newaxis]
-            Dc_div_DX = np.diff(self.c, axis=0) / np.diff(self._X)[:, np.newaxis]
+            Dc_div_DX = np.diff(self.c, axis=-1) / np.diff(self._X)
 
+            alt_sign = (-1) ** np.arange(self.n)
             b_lower, b_upper = np.array_split(
                 -2 * alt_sign[:-1] * Dc_div_DX,
                 (n_mid,),
-                axis=0
+                axis=-1
             )
             b_cumdiff = np.concatenate([
-                -b_lower[::-1].cumsum(axis=0)[::-1],
+                -b_lower[..., ::-1].cumsum(axis=-1)[..., ::-1],
                 np.zeros_like(self._b_mid),
-                b_upper.cumsum(axis=0),
-            ], axis=0)
+                b_upper.cumsum(axis=-1),
+            ], axis=-1)
             self._b = alt_sign * (b_cumdiff + alt_sign[n_mid]*self._b_mid)
 
         return self._b
@@ -64,7 +64,7 @@ class MatrixBuilder:
     @property
     def aDX(self):
         if self._aDX is None:
-            self._aDX = np.diff(self.b, axis=0, prepend=0, append=0) / 2
+            self._aDX = np.diff(self.b, axis=-1, prepend=0, append=0) / 2
 
         return self._aDX
 
@@ -73,9 +73,9 @@ class MatrixBuilder:
 
     def pull_values_from(self, params):
         return (
-            self.aDX.dot(params),
-            self.b.dot(params),
-            self.c.dot(params),
+            self.aDX.T.dot(params),
+            self.b.T.dot(params),
+            self.c.T.dot(params),
         )
 
 
@@ -108,10 +108,6 @@ def make_spline(params, X):
     )
 
 
-def lhood_quad_coeffs(n):
-    return -d2dp2_rlhood(n, np.arange(n))
-
-
 def make_obj_func(X):
     p_exp = MatrixBuilder(X)
     est_c = np.linspace(0, 1, 2*len(X)+1)[1::2]
@@ -142,7 +138,7 @@ def make_bi_constraints(X):
             'fun': lambda params: b_i.dot(params),
             'jac': lambda params: b_i
         }
-        for b_i in b
+        for b_i in b.T
     ]
 
 
@@ -155,12 +151,12 @@ def make_delta_ci_constraints(X):
             'fun': lambda params: c_diff.dot(params),
             'jac': lambda params: c_diff
         }
-        for c_diff in np.diff(c, axis=0, prepend=0)
+        for c_diff in np.diff(c, axis=-1, prepend=0).T
     ] + [
         {
             'type': 'ineq',
-            'fun': lambda params: 1-c[-1].dot(params),
-            'jac': lambda params: -c[-1]
+            'fun': lambda params: 1-c[..., -1].dot(params),
+            'jac': lambda params: -c[..., -1]
         }
     ]
 
