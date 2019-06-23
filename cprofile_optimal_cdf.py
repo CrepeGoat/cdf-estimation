@@ -5,8 +5,11 @@ import numpy as np
 from optimal_cdf import *
 
 
+size = 20
+
+
 def main():
-    X = np.arange(0, 60, 3) + np.random.random(20)
+    X = np.arange(0, size*3, 3) + np.random.random(size)
 
     prof = cProfile.Profile()
     prof.enable()
