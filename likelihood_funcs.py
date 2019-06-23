@@ -2,6 +2,7 @@ from itertools import chain
 import functools
 
 import numpy as np
+import scipy.misc
 
 
 def nCkarray(k_array):
@@ -69,7 +70,7 @@ def lhood(n, k, p=None):
     if p is None:
         p = p_max_likelihood(n, k)
 
-    return nCkarray([k, n-k]) * p**(k+.5) * (1-p)**(n-(k+.5))
+    return scipy.misc.comb(n, k+.5) * p**(k+.5) * (1-p)**(n-(k+.5))
 
 
 def log2_lhood(n, k, p=None):
@@ -79,7 +80,11 @@ def log2_lhood(n, k, p=None):
     if p is None:
         p = p_max_likelihood(n, k)
 
-    return log2_nCk(n, k) + np.log2(p)*(k+.5) + np.log2(1-p)*(n-(k+.5))
+    return (
+        np.log2(scipy.misc.comb(n, k+.5))
+        + np.log2(p)*(k+.5)
+        + np.log2(1-p)*(n-(k+.5))
+    )
 
 
 def d2dp2_lhood(n, k, p=None):

@@ -119,9 +119,7 @@ def make_obj_func(X):
             aDX**2 / np.diff(extend_samples(X, aDX, b, c))[1:-1]
         ))
         likelihood_fit = np.sum(
-            #np.log2(1 + lhood_quad_coeffs(p_exp.n) * (c - est_c)**2)
-            log2_lhood(len(c), i, p_i)
-            for i, p_i in enumerate(c)
+            log2_lhood(len(c), np.arange(len(c)), c)
         )
 
         return roughness - likelihood_fit
