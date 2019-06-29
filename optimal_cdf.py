@@ -5,7 +5,7 @@ import scipy
 import scipy.interpolate
 import scipy.optimize
 
-from likelihood_funcs import *
+from likelihood import *
 
 
 def init_parameters(X):
