@@ -1,12 +1,3 @@
-import pytest
-
-from optimal_cdf import *
-
-import numpy as np
-import sympy as sp
-
-np.random.seed(0)
-
 '''
 Author: Becker Awqatty
 
@@ -24,6 +15,15 @@ for designing comprehensive test cases. The downside in this method
 is that rounding errors are not considered when comparing calculated
 and expected results; however this is acceptable for my purposes.
 '''
+
+import pytest
+
+from optimal_cdf import *
+
+import numpy as np
+import sympy as sp
+
+np.random.seed(0)
 
 min_test_size = 3
 
