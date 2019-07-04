@@ -70,7 +70,7 @@ def lhood(n, k, p=None):
     if p is None:
         p = p_max_likelihood(n, k)
 
-    return scipy.misc.comb(n, k+.5) * p**(k+.5) * (1-p)**(n-(k+.5))
+    return scipy.misc.comb(n, (2*k+1)/2) * p**((2*k+1)/2) * (1-p)**(n-(2*k+1)/2)
 
 
 def log2_lhood(n, k, p=None):
@@ -81,9 +81,9 @@ def log2_lhood(n, k, p=None):
         p = p_max_likelihood(n, k)
 
     return (
-        np.log2(scipy.misc.comb(n, k+.5))
-        + np.log2(p)*(k+.5)
-        + np.log2(1-p)*(n-(k+.5))
+        np.log2(scipy.misc.comb(n, (2*k+1)/2))
+        + np.log2(p)*((2*k+1)/2)
+        + np.log2(1-p)*(n-((2*k+1)/2))
     )
 
 
