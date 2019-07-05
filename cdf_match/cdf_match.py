@@ -13,6 +13,9 @@ def cdf_match(X_cdf, x, presorted=False):
     confidence_levels = scipy.stats.binom.cdf(i, n, X_cdf(x))
     confidence_levels = 2 * np.minimum(confidence_levels, 1-confidence_levels)
 
+    if np.any(confidence_levels == 0):
+        return 0
+
     return np.power(2, np.sum(np.log2(confidence_levels)) / n)
 
 
