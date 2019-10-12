@@ -30,14 +30,19 @@ def test_cdf_match_true_positives(rv):
 
 
 @pytest.mark.parametrize('rv_true, rv_guess', [
-    (scipy.stats.expon(), scipy.stats.norm(1, 1))
+    (scipy.stats.expon(), scipy.stats.norm(1, 1)),
+    (scipy.stats.norm(0, 1), scipy.stats.norm(0, 0.9)),
+    (scipy.stats.norm(0, 0.9), scipy.stats.norm(0, 1)),
 ])
 def test_cdf_match_false_positives(rv_true, rv_guess):
     assert check_cdf_match(rv_true, rv_guess.cdf, sample_count=10)
 
 
 @pytest.mark.parametrize('rv_true, rv_guess', [
-    (scipy.stats.expon(), scipy.stats.norm(1, 1))
+    (scipy.stats.norm(1, 1), scipy.stats.expon()),
+    (scipy.stats.expon(), scipy.stats.norm(1, 1)),
+    (scipy.stats.norm(0, 1), scipy.stats.norm(0, 0.9)),
+    (scipy.stats.norm(0, 0.9), scipy.stats.norm(0, 1)),
 ])
 def test_cdf_match_true_negatives(rv_true, rv_guess):
     assert not check_cdf_match(rv_true, rv_guess.cdf, sample_count=10**3)

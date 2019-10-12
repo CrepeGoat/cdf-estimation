@@ -19,6 +19,11 @@ def cdf_match(X_cdf, x, presorted=False):
     return np.power(2, np.sum(np.log2(confidence_levels)) / n)
 
 
+def rv_match(rv_family, x, presorted=False):
+    rv = rv_family(*rv_family.fit(x))
+    return cdf_match(rv.cdf, x, presorted)
+
+
 if __name__ == '__main__':
     rv = scipy.stats.norm()
     x = rv.rvs(100000)
